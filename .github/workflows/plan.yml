@@ -1,0 +1,35 @@
+name: Plan
+
+on:
+  pull_request:
+    paths:
+      - "networks/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.12"
+      MERAKI_API_KEY: ${{ secrets.MERAKI_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --no-dev
+      - name: Validate
+        run: uv run netops validate networks/
+      - name: Plan
+        run: |
+          if [ -n "$MERAKI_API_KEY" ]; then MODE=""; SRC="API real"; else MODE="--simulate"; SRC="simulador"; fi
+          {
+            echo "### netops plan ($SRC)"
+            uv run netops plan networks/ $MODE --format markdown
+          } > plan.md
+          cat plan.md
+      - name: Comment on PR
+        run: gh pr comment "$PR" --body-file plan.md --edit-last || gh pr comment "$PR" --body-file plan.md
